@@ -34,13 +34,17 @@ extern "C" {
 }
 
 #include <Arduino.h>
-
+#include <WifiEspNow.h>
 #include <SPIS.h>
 #include <WiFi.h>
 
 #include "CommandHandler.h"
 
 #define SPI_BUFFER_LEN SPI_MAX_DMA_LEN
+
+
+//This is the MAC ADDRESS of the Peer.
+static uint8_t PEER[]{0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 int debug = 0;
 
@@ -156,6 +160,12 @@ unsigned long getTime() {
   return ret;
 }
 
+void rcvedMessage(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg){
+
+  //Message from ESPNOW recieved.
+
+}
+
 void setupWiFi() {
   esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
   SPIS.begin();
@@ -175,6 +185,25 @@ void setupWiFi() {
 
   commandBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
   responseBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
+
+  
+  WiFi.mode(WIFI_AP_STA);
+  
+  bool ok = WiFiEspNow.begin();
+
+  if(!ok)
+  {
+    ESP.restart();
+  }
+
+  WiFiEspNow.onReceive(rcvedMessage, nullptr);
+
+  ok = WiFiEspNow.addPeer(PEER);
+
+  if(!ok)
+  {
+    ESP.restart();
+  }
 
   CommandHandler.begin();
 }
