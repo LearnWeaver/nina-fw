@@ -34,7 +34,7 @@ extern "C" {
 }
 
 #include <Arduino.h>
-#include <WifiEspNow.h>
+#include <espnow.h>
 #include <SPIS.h>
 #include <WiFi.h>
 
@@ -159,11 +159,21 @@ unsigned long getTime() {
   } while (ret == 0);
   return ret;
 }
+void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
+  Serial.print("Last Packet Send Status: ");
+  if (sendStatus == 0){
+    Serial.println("Delivery success");
+  }
+  else{
+    Serial.println("Delivery fail");
+  }
+}
 
-void rcvedMessage(const uint8_t mac[6], const uint8_t* buf, size_t count, void* cbarg){
-
-  //Message from ESPNOW recieved.
-
+void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
+  memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
+  Serial.print("Bytes received: ");
+  Serial.println(len);
+ 
 }
 
 void setupWiFi() {
@@ -186,24 +196,24 @@ void setupWiFi() {
   commandBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
   responseBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
 
-  
-  WiFi.mode(WIFI_AP_STA);
-  
-  bool ok = WiFiEspNow.begin();
-
-  if(!ok)
-  {
-    ESP.restart();
+  // Init ESP-NOW
+  if (esp_now_init() != 0) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
   }
 
-  WiFiEspNow.onReceive(rcvedMessage, nullptr);
+  // Set ESP-NOW Role
+  esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
 
-  ok = WiFiEspNow.addPeer(PEER);
-
-  if(!ok)
-  {
-    ESP.restart();
-  }
+  // Once ESPNow is successfully Init, we will register for Send CB to
+  // get the status of Trasnmitted packet
+  esp_now_register_send_cb(OnDataSent);
+  
+  // Register peer
+  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, 1, NULL, 0);
+  
+  // Register for a callback function that will be called when data is received
+  esp_now_register_recv_cb(OnDataRecv);
 
   CommandHandler.begin();
 }
