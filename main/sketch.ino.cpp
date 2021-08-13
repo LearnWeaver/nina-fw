@@ -196,22 +196,28 @@ void setupWiFi() {
   commandBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
   responseBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
 
+  
   // Init ESP-NOW
-  if (esp_now_init() != 0) {
-   // Serial.println("Error initializing ESP-NOW");
+  if (esp_now_init() != ESP_OK) {
+    //Serial.println("Error initializing ESP-NOW");
     return;
   }
-
-  // Set ESP-NOW Role
-  esp_now_set_self_role(ESP_NOW_ROLE_COMBO);
 
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Trasnmitted packet
   esp_now_register_send_cb(OnDataSent);
   
   // Register peer
-  esp_now_add_peer(PEER, ESP_NOW_ROLE_COMBO, 1, NULL, 0);
+  esp_now_peer_info_t peerInfo;
+  memcpy(peerInfo.peer_addr, PEER, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
   
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    //Serial.println("Failed to add peer");
+    return;
+  }
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
 
