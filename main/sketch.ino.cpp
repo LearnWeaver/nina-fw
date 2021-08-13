@@ -160,19 +160,19 @@ unsigned long getTime() {
   return ret;
 }
 void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
-  Serial.print("Last Packet Send Status: ");
+ // Serial.print("Last Packet Send Status: ");
   if (sendStatus == 0){
-    Serial.println("Delivery success");
+   // Serial.println("Delivery success");
   }
   else{
-    Serial.println("Delivery fail");
+    //Serial.println("Delivery fail");
   }
 }
 
 void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
   memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
+  //Serial.print("Bytes received: ");
+  //Serial.println(len);
  
 }
 
@@ -198,7 +198,7 @@ void setupWiFi() {
 
   // Init ESP-NOW
   if (esp_now_init() != 0) {
-    Serial.println("Error initializing ESP-NOW");
+   // Serial.println("Error initializing ESP-NOW");
     return;
   }
 
