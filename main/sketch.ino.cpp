@@ -160,16 +160,10 @@ unsigned long getTime() {
   return ret;
 }
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)  {
- // Serial.print("Last Packet Send Status: ");
-  if (sendStatus == 0){
-   // Serial.println("Delivery success");
-  }
-  else{
-    //Serial.println("Delivery fail");
-  }
+
 }
 
-void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
+void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
   //memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
   //Serial.print("Bytes received: ");
   //Serial.println(len);
