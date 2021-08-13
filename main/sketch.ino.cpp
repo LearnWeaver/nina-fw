@@ -34,7 +34,7 @@ extern "C" {
 }
 
 #include <Arduino.h>
-#include <espnow.h>
+#include <esp_now.h>
 #include <SPIS.h>
 #include <WiFi.h>
 
