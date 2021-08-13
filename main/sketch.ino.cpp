@@ -210,7 +210,7 @@ void setupWiFi() {
   esp_now_register_send_cb(OnDataSent);
   
   // Register peer
-  esp_now_add_peer(broadcastAddress, ESP_NOW_ROLE_COMBO, 1, NULL, 0);
+  esp_now_add_peer(PEER, ESP_NOW_ROLE_COMBO, 1, NULL, 0);
   
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
