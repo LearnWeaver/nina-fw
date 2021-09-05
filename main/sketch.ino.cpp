@@ -21,30 +21,19 @@
 
 extern "C" {
   #include <driver/periph_ctrl.h>
-
   #include <driver/uart.h>
   #include <esp_bt.h>
-
-  #include "esp_spiffs.h"
-  #include "esp_log.h"
-  #include <stdio.h>
-  #include <sys/types.h>
-  #include <dirent.h>
-  #include "esp_partition.h"
 }
 
 #include <Arduino.h>
-#include <esp_now.h>
+
 #include <SPIS.h>
+#include <esp_now.h>
 #include <WiFi.h>
 
 #include "CommandHandler.h"
 
 #define SPI_BUFFER_LEN SPI_MAX_DMA_LEN
-
-
-//This is the MAC ADDRESS of the Peer.
-static uint8_t PEER[]{0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 int debug = 0;
 
@@ -78,6 +67,8 @@ void setDebug(int d) {
     // uartAttach();
     ets_install_uart_printf();
     uart_tx_switch(CONFIG_CONSOLE_UART_NUM);
+
+    ets_printf("*** DEBUG ON\n");
   } else {
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[1], PIN_FUNC_GPIO);
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[3], PIN_FUNC_GPIO);
@@ -101,126 +92,113 @@ void setup() {
   pinMode(15, INPUT);
   pinMode(21, INPUT);
 
-#if defined(NANO_RP2040_CONNECT)
-  pinMode(26, OUTPUT);
-  pinMode(27, OUTPUT);
-  digitalWrite(26, HIGH);
-  digitalWrite(27, HIGH);
-#endif
-
   pinMode(5, INPUT);
   if (digitalRead(5) == LOW) {
+    if (debug)  ets_printf("*** BLUETOOTH ON\n");
+
     setupBluetooth();
   } else {
+    if (debug)  ets_printf("*** WIFI ON\n");
+
     setupWiFi();
   }
 }
 
-// #define UNO_WIFI_REV2
+void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
+  char macStr[18];
+  ets_printf("Packet received from: ");
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  ets_printf(macStr);
+  
+  uart_write_bytes(UART_NUM_1, (const char*)macStr, strlen(macStr));
+}
+
+#define AIRLIFT 1
 
 void setupBluetooth() {
+  if (debug)  ets_printf("setup periph\n");
+
+  WiFi.mode(WIFI_STA);
+
+  if (esp_now_init() != ESP_OK) 
+  {
+    ets_printf("Error initializing ESP-NOW");
+    return;
+  }
+
+  esp_now_register_recv_cb(OnDataRecv);
+
   periph_module_enable(PERIPH_UART1_MODULE);
   periph_module_enable(PERIPH_UHCI0_MODULE);
 
-#if defined(UNO_WIFI_REV2)
+  if (debug)  ets_printf("setup pins\n");
+
+#ifdef UNO_WIFI_REV2
   uart_set_pin(UART_NUM_1, 1, 3, 33, 0); // TX, RX, RTS, CTS
-#elif defined(NANO_RP2040_CONNECT)
-  uart_set_pin(UART_NUM_1, 1, 3, 33, 12); // TX, RX, RTS, CTS
+#elif defined(AIRLIFT)
+  // TX GPIO1 & RX GPIO3 on ESP32 'hardware' UART
+  // RTS on ESP_BUSY (GPIO33)
+  // CTS on GPIO0 (GPIO0)
+  // uart_set_pin(UART_NUM_1, 22, 23, 33, 0);
+  uart_set_pin(UART_NUM_1, 1, 3, 33, 0);
 #else
   uart_set_pin(UART_NUM_1, 23, 12, 18, 5);
-#endif
   uart_set_hw_flow_ctrl(UART_NUM_1, UART_HW_FLOWCTRL_CTS_RTS, 5);
+#endif
 
-  esp_bt_controller_config_t btControllerConfig = BT_CONTROLLER_INIT_CONFIG_DEFAULT(); 
+  if (debug)  ets_printf("setup controller\n");
+
+  esp_bt_controller_config_t btControllerConfig = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 
   btControllerConfig.hci_uart_no = UART_NUM_1;
-#if defined(UNO_WIFI_REV2) || defined(NANO_RP2040_CONNECT)
+#ifdef UNO_WIFI_REV2
+  btControllerConfig.hci_uart_baudrate = 115200;
+#elif defined(AIRLIFT)
   btControllerConfig.hci_uart_baudrate = 115200;
 #else
   btControllerConfig.hci_uart_baudrate = 912600;
 #endif
 
   esp_bt_controller_init(&btControllerConfig);
-  while (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE);
+  while (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE) {
+     if (debug)  ets_printf("idle\n");
+  }
   esp_bt_controller_enable(ESP_BT_MODE_BLE);
   esp_bt_sleep_enable();
 
   vTaskSuspend(NULL);
 
+  // Don't exit. We don't need loop() to run.
   while (1) {
     vTaskDelay(portMAX_DELAY);
+    if (debug)  ets_printf(".");
   }
-}
-
-unsigned long getTime() {
-  int ret = 0;
-  do {
-    ret = WiFi.getTime();
-  } while (ret == 0);
-  return ret;
-}
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)  {
-  ets_printf("Sent");
-}
-
-void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len) {
-  ets_printf("Recv");
- 
 }
 
 void setupWiFi() {
   esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
+  if (debug)  ets_printf("*** SPIS\n");
   SPIS.begin();
 
-  esp_vfs_spiffs_conf_t conf = {
-    .base_path = "/fs",
-    .partition_label = "storage",
-    .max_files = 20,
-    .format_if_mount_failed = true
-  };
-
-  esp_err_t ret = esp_vfs_spiffs_register(&conf);
-
   if (WiFi.status() == WL_NO_SHIELD) {
+    if (debug)  ets_printf("*** NOSHIELD\n");
     while (1); // no shield
   }
 
   commandBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
   responseBuffer = (uint8_t*)heap_caps_malloc(SPI_BUFFER_LEN, MALLOC_CAP_DMA);
 
-  
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    //Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
-  esp_now_register_send_cb(OnDataSent);
-  
-  // Register peer
-  esp_now_peer_info_t peerInfo;
-  memcpy(peerInfo.peer_addr, PEER, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    //Serial.println("Failed to add peer");
-    return;
-  }
-  // Register for a callback function that will be called when data is received
-  esp_now_register_recv_cb(OnDataRecv);
-
+  if (debug)  ets_printf("*** BEGIN\n");
   CommandHandler.begin();
 }
 
 void loop() {
+  if (debug)  ets_printf(".");
   // wait for a command
   memset(commandBuffer, 0x00, SPI_BUFFER_LEN);
   int commandLength = SPIS.transfer(NULL, commandBuffer, SPI_BUFFER_LEN);
-
+  if (debug)  ets_printf("%d", commandLength);
   if (commandLength == 0) {
     return;
   }
