@@ -119,7 +119,9 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
 void setupBluetooth() {
   if (debug)  ets_printf("setup periph\n");
 
-  WiFi.mode(1);
+  esp_wifi_stop();
+  esp_wifi_set_mode(WIFI_MODE_STA);
+  esp_wifi_start();
 
   if (esp_now_init() != ESP_OK) 
   {
