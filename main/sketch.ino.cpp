@@ -29,6 +29,7 @@ extern "C" {
 
 #include <SPIS.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <WiFi.h>
 
 #include "CommandHandler.h"
